@@ -32,7 +32,19 @@ export default function Home() {
 
   return (
     <main className="mx-auto max-w-xl p-8">
-      <h1 className="text-3xl font-bold mb-6">{t.communities}</h1>
+            <section className="mb-10">
+        <h1 className="text-4xl font-bold mb-3">{t.heroTitle}</h1>
+        <p className="mb-5 opacity-80">{t.heroText}</p>
+        <div className="flex gap-3">
+          <Link href="/login" className="rounded bg-white px-4 py-2 text-black">
+            {t.heroCta}
+          </Link>
+          <a href="#communities" className="rounded border px-4 py-2">
+            {t.browse}
+          </a>
+        </div>
+      </section>
+      <h2 id="communities" className="text-2xl font-bold mb-4">{t.communities}</h2>
       <ul className="space-y-3">
         {communities.map((c) => (
           <li key={c.id}>

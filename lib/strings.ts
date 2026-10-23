@@ -42,5 +42,12 @@ export const t = {
   reportCancel: "Cancel",
   reportFailed: "Couldn't send the report: ",
   terms: "Terms",
+    appName: "Ibasho",
+  tagline: "A home for every fandom",
+  heroTitle: "Ibasho: a home for every fandom",
+  heroText:
+    "Ibasho (居場所) is Japanese for “a place where you can be yourself.” Every fandom gets its own space for posts, images, and short videos, and everything in it is about one topic.",
+  heroCta: "Sign up free",
+  browse: "Browse communities",
   locale: "en-US",
 };

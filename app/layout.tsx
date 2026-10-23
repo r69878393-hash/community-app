@@ -13,8 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Community App",
-  description: "A community-first social network",
+  title: "Ibasho: a home for every fandom",
+  description:
+    "Ibasho is a social network where each fandom gets its own space for posts, images, and short videos.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
