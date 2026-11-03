@@ -1,36 +1,108 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ibasho
 
-## Getting Started
+**A home for every fandom.**
 
-First, run the development server:
+Ibasho is a small social app where each fandom gets its own space.
+
+Think of a typical social network as one giant school where everyone is mixed together. Ibasho works differently: you make a *class* around the thing you love, and the people who love it gather there.
+
+*"Ibasho" (居場所) is a Japanese word for a place where you feel you belong.*
+
+> **Status:** early prototype. Things will change, and some parts are rough.
+
+**Live demo:** https://community-app-five-sigma.versel.app
+
+---
+
+## What it does
+
+- **Communities by interest.** Each community (fandom, game, show, artist) has its own page, such as `/c/haruhi`.
+- **Three kinds of posts.** Text, images (up to 5 MB), and short videos (MP4 or WebM, up to 20 MB and 60 seconds).
+- **Accounts.** Sign up with email and password, with a public username. Email addresses are never shown to other users.
+- **Your posts, your control.** Delete your own posts, including their uploaded files.
+- **Reporting.** Report a post as spam, abuse, copyright, or other.
+
+## Tech stack
+
+- [Next.js](https://nextjs.org/) (App Router, TypeScript)
+- [Tailwind CSS](https://tailwindcss.com/)
+- [Supabase](https://supabase.com/) (Auth, Postgres, Storage)
+- Deployed on [Vercel](https://vercel.com/)
+
+## Project structure
+
+```
+app/
+  page.tsx                    Home page and community list
+  layout.tsx                  Site title and description
+  login/page.tsx              Log in / sign up
+  terms/page.tsx              Terms (template)
+  c/[slug]/page.tsx           Community route
+  c/[slug]/CommunityView.tsx  Community page (posts, media, delete, report)
+lib/
+  supabase.ts                 Supabase client
+  strings.ts                  All on-screen text in one place
+```
+
+## Data model
+
+Tables, all with Row Level Security (RLS) enabled:
+
+| Table | Purpose |
+| --- | --- |
+| `communities` | id, slug, name, description |
+| `posts` | content, type (text / image / video), file paths, author, community |
+| `profiles` | public username for each user |
+| `reports` | one report per user per post, with a reason |
+
+Storage buckets: `post-images` and `post-videos`. Users can only upload into their own folder.
+
+Access rules in short: anyone can read; only signed-in users can post, delete their own posts, and report.
+
+## Getting started
+
+You need Node.js and a free Supabase project.
+
+```bash
+git clone https://github.com/r69878393-hash/community-app.git
+cd community-app
+npm install
+```
+
+Create a file named `.env.local` in the project root (see `.env.example`):
+
+```
+NEXT_PUBLIC_SUPABASE_URL=your-project-url
+NEXT_PUBLIC_SUPABASE_KEY=your-anon-public-key
+```
+
+Then start the dev server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+**Supabase setup:** create the tables and storage buckets listed above, then turn on RLS for each table and add the access rules described in "Data model". Never commit `.env.local`, and never put a `service_role` key in client code.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Known limitations
 
-## Learn More
+- Reported posts are not hidden automatically. Reports are reviewed by hand.
+- Videos are served directly from Supabase Storage (small free-tier limit). A video service may be needed later.
+- Supabase's built-in email sending is rate-limited; custom SMTP is needed for real traffic.
+- The terms page is a template, not legal advice.
 
-To learn more about Next.js, take a look at the following resources:
+## Roadmap
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Let anyone create a community, with limits (sign-in required, a cap per user, naming rules, report handling)
+- Custom domain and SEO
+- Better moderation tools
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Feedback and contributions
 
-## Deploy on Vercel
+Ideas, bug reports, and questions are very welcome. Please open an issue or start a discussion.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## License
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Not decided yet.
