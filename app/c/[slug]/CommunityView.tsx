@@ -68,6 +68,7 @@ export default function CommunityView() {
   const [userId, setUserId] = useState<string | null>(null);
   const [reportingId, setReportingId] = useState<number | null>(null);
   const [reportedIds, setReportedIds] = useState<number[]>([]);
+  const [tab, setTab] = useState<"all" | "text" | "image" | "video">("all");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -256,6 +257,8 @@ export default function CommunityView() {
     return <main className="mx-auto max-w-xl p-8">{t.loading}</main>;
   }
 
+  const visiblePosts = posts.filter((p) => tab === "all" || p.type === tab);
+
   return (
     <main className="mx-auto max-w-xl p-8">
       <div className="flex justify-between text-sm">
@@ -314,8 +317,33 @@ export default function CommunityView() {
         </p>
       )}
 
-      <ul className="mt-6 space-y-3">
-        {posts.map((post) => (
+      <div className="mt-6 flex gap-2 text-sm">
+        {(
+          [
+          ["all", "All"],
+          ["text", "Text"],
+          ["image", "Image"],
+          ["video", "Videos"],
+        ] as const
+      ).map(([value, label]) => (
+        <button
+        key={value}
+        className={`rounded border px-3 py-1 ${
+          tab === value ? "bg-white text-black" : ""
+        }`}
+        onClick={() => setTab(value)}
+        >
+          {label}
+        </button>
+      ))}
+      </div>
+
+      {visiblePosts.length === 0 && (
+        <p className="mt-4 text-sm opacity-70">No posts here yet.</p>
+      )}
+
+      <ul className="mt-3 space-y-3">
+        {visiblePosts.map((post) => (
           <li key={post.id} className="rounded border p-3">
             <div className="mb-1 text-sm opacity-70">
               {getUsername(post)} ・{" "}
