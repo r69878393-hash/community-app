@@ -321,7 +321,7 @@ export default function CommunityView() {
               {getUsername(post)} ・{" "}
               {new Date(post.created_at).toLocaleString(t.locale)}
             </div>
-            {post.content && <div>{post.content}</div>}
+            {post.content && <div className='whitespace-pre-wrap'>{post.content}</div>}
             {post.image_path && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
