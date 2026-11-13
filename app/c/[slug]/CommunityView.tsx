@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -69,6 +69,9 @@ export default function CommunityView() {
   const [reportingId, setReportingId] = useState<number | null>(null);
   const [reportedIds, setReportedIds] = useState<number[]>([]);
   const [tab, setTab] = useState<"all" | "text" | "image" | "video">("all");
+  const [activeVideoId, setActiveVideoId] = useState<number | null>(null);
+  const videoFeedRef = useRef<HTMLUListElement | null>(null);
+  const isVideoFeed = tab === "video";
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -115,6 +118,44 @@ export default function CommunityView() {
     };
     load();
   }, [slug]);
+
+  useEffect(() => {
+    const feed = videoFeedRef.current;
+    if (!feed || !isVideoFeed) {
+      setActiveVideoId(null);
+      return;
+    }
+
+    const slides = feed.querySelectorAll<HTMLElement>("[data-video-slide]");
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const mostVisible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (mostVisible) {
+          const postId = Number(mostVisible.target.getAttribute("data-video-slide"));
+          if (Number.isFinite(postId)) setActiveVideoId(postId);
+        }
+      },
+      { root: feed, threshold: [0.6] }
+    );
+
+    slides.forEach((slide) => observer.observe(slide));
+    return () => observer.disconnect();
+  }, [isVideoFeed, posts]);
+
+  useEffect(() => {
+    const feed = videoFeedRef.current;
+    if (!feed) return;
+
+    feed.querySelectorAll<HTMLVideoElement>("video").forEach((video) => {
+      if (isVideoFeed && Number(video.dataset.videoPostId) === activeVideoId) {
+        video.play().catch(() => {});
+      } else {
+        video.pause();
+      }
+    });
+  }, [activeVideoId, isVideoFeed, posts]);
 
   const rejectFile = (message: string) => {
     setError(message);
@@ -258,6 +299,185 @@ export default function CommunityView() {
   }
 
   const visiblePosts = posts.filter((p) => tab === "all" || p.type === tab);
+  const videoPosts = visiblePosts.filter((post) => post.type === "video" && post.video_path);
+
+  const advanceToNextVideo = (postId: number) => {
+    if (videoPosts.length === 0) return;
+    if (videoPosts.length === 1) {
+      const onlyVideo = videoFeedRef.current?.querySelector<HTMLVideoElement>("video");
+      if (onlyVideo) {
+        onlyVideo.currentTime = 0;
+        onlyVideo.play().catch(() => {});
+      }
+      return;
+    }
+    const currentIndex = videoPosts.findIndex((post) => post.id === postId);
+    const nextPost = videoPosts[(currentIndex + 1) % videoPosts.length];
+    const nextSlide = videoFeedRef.current?.querySelector<HTMLElement>(
+      `[data-video-slide="${nextPost.id}"]`
+    );
+    nextSlide?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const renderPost = (post: Post, immersive = false) => (
+    <li
+      key={post.id}
+      data-video-slide={immersive ? post.id : undefined}
+      className={
+        immersive
+          ? "relative flex h-[100dvh] snap-start snap-always flex-col overflow-hidden bg-black p-4 text-white"
+          : "rounded border p-3"
+      }
+    >
+      {immersive && post.video_path && (
+        <video
+          data-video-post-id={post.id}
+          src={getPublicUrl("post-videos", post.video_path)}
+          controls
+          controlsList="nofullscreen"
+          autoPlay={activeVideoId === post.id}
+          muted
+          playsInline
+          preload={activeVideoId === post.id ? "auto" : "metadata"}
+          onEnded={() => advanceToNextVideo(post.id)}
+          className="absolute inset-0 h-full w-full bg-black object-contain"
+        />
+      )}
+      <div
+        className={
+          immersive
+            ? "absolute left-4 right-20 top-16 z-10 rounded bg-black/40 p-2 text-sm"
+            : "mb-1 text-sm opacity-70"
+        }
+      >
+        {getUsername(post)} ・ {new Date(post.created_at).toLocaleString(t.locale)}
+      </div>
+      {post.content && (
+        <div
+          className={
+            immersive
+              ? "absolute bottom-24 left-4 right-20 z-10 whitespace-pre-wrap rounded bg-black/40 p-2"
+              : "whitespace-pre-wrap"
+          }
+        >
+          {post.content}
+        </div>
+      )}
+      {!immersive && post.image_path && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={getPublicUrl("post-images", post.image_path)}
+          alt=""
+          className="mt-2 max-h-96 rounded"
+        />
+      )}
+      {!immersive && post.video_path && (
+        <video
+          src={getPublicUrl("post-videos", post.video_path)}
+          controls
+          playsInline
+          preload="metadata"
+          className="mt-2 max-h-[70dvh] w-full rounded object-contain"
+        />
+      )}
+      {userId && post.user_id === userId && (
+        <button
+          className={
+            immersive
+              ? "absolute bottom-20 right-4 z-10 rounded bg-black/60 px-3 py-2 text-sm"
+              : "mt-2 block text-sm underline opacity-70"
+          }
+          onClick={() => handleDelete(post)}
+        >
+          {t.delete}
+        </button>
+      )}
+      {userId && post.user_id !== userId && (
+        <div
+          className={
+            immersive
+              ? "absolute bottom-20 right-4 z-10 rounded bg-black/60 p-2 text-sm"
+              : "mt-2 text-sm"
+          }
+        >
+          {reportedIds.includes(post.id) ? (
+            <span className="opacity-70">{t.reported}</span>
+          ) : reportingId === post.id ? (
+            <div className={immersive ? "max-w-[75vw] rounded bg-black/90 p-2" : "rounded border p-2"}>
+              <p className="mb-2">{t.reportTitle}</p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  ["spam", t.reportSpam],
+                  ["abuse", t.reportAbuse],
+                  ["copyright", t.reportCopyright],
+                  ["other", t.reportOther],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    className="rounded border px-2 py-1"
+                    onClick={() => handleReport(post.id, value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+                <button
+                  className="underline opacity-70"
+                  onClick={() => setReportingId(null)}
+                >
+                  {t.reportCancel}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="underline opacity-70"
+              onClick={() => setReportingId(post.id)}
+            >
+              {t.report}
+            </button>
+          )}
+        </div>
+      )}
+    </li>
+  );
+
+  if (isVideoFeed) {
+    return (
+      <main className="fixed inset-0 z-50 overflow-hidden bg-black text-white">
+        <header className="absolute inset-x-0 top-0 z-20 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent p-4 pt-[max(1rem,env(safe-area-inset-top))]">
+          <button
+            className="rounded-full bg-black/50 px-3 py-2 text-sm"
+            onClick={() => setTab("all")}
+          >
+            ← All
+          </button>
+          <span className="mx-2 truncate text-sm">{community.name} · Videos</span>
+          {userId ? (
+            <button className="rounded-full bg-black/50 px-3 py-2 text-sm" onClick={handleLogout}>
+              {t.logout}
+            </button>
+          ) : (
+            <Link href="/login" className="rounded-full bg-black/50 px-3 py-2 text-sm">
+              {t.login}
+            </Link>
+          )}
+        </header>
+
+        {videoPosts.length === 0 ? (
+          <div className="grid h-full place-items-center px-6 text-center">
+            <p className="text-sm opacity-70">No posts here yet.</p>
+          </div>
+        ) : (
+          <ul
+            ref={videoFeedRef}
+            className="h-[100dvh] snap-y snap-mandatory overflow-y-auto overscroll-y-contain"
+          >
+            {videoPosts.map((post) => renderPost(post, true))}
+          </ul>
+        )}
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto max-w-xl p-8">
@@ -343,80 +563,7 @@ export default function CommunityView() {
       )}
 
       <ul className="mt-3 space-y-3">
-        {visiblePosts.map((post) => (
-          <li key={post.id} className="rounded border p-3">
-            <div className="mb-1 text-sm opacity-70">
-              {getUsername(post)} ・{" "}
-              {new Date(post.created_at).toLocaleString(t.locale)}
-            </div>
-            {post.content && <div className='whitespace-pre-wrap'>{post.content}</div>}
-            {post.image_path && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={getPublicUrl("post-images", post.image_path)}
-                alt=""
-                className="mt-2 max-h-96 rounded"
-              />
-            )}
-            {post.video_path && (
-              <video
-                src={getPublicUrl("post-videos", post.video_path)}
-                controls
-                playsInline
-                preload="metadata"
-                className="mt-2 max-h-96 rounded"
-              />
-            )}
-            {userId && post.user_id === userId && (
-              <button
-                className="mt-2 block text-sm underline opacity-70"
-                onClick={() => handleDelete(post)}
-              >
-                {t.delete}
-              </button>
-            )}
-                        {userId && post.user_id !== userId && (
-              <div className="mt-2 text-sm">
-                {reportedIds.includes(post.id) ? (
-                  <span className="opacity-70">{t.reported}</span>
-                ) : reportingId === post.id ? (
-                  <div className="rounded border p-2">
-                    <p className="mb-2">{t.reportTitle}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {[
-                        ["spam", t.reportSpam],
-                        ["abuse", t.reportAbuse],
-                        ["copyright", t.reportCopyright],
-                        ["other", t.reportOther],
-                      ].map(([value, label]) => (
-                        <button
-                          key={value}
-                          className="rounded border px-2 py-1"
-                          onClick={() => handleReport(post.id, value)}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                      <button
-                        className="underline opacity-70"
-                        onClick={() => setReportingId(null)}
-                      >
-                        {t.reportCancel}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    className="underline opacity-70"
-                    onClick={() => setReportingId(post.id)}
-                  >
-                    {t.report}
-                  </button>
-                )}
-              </div>
-            )}
-          </li>
-        ))}
+        {visiblePosts.map((post) => renderPost(post))}
       </ul>
             <footer className="mt-10 text-xs opacity-60">
         <Link href="/terms" className="underline">
