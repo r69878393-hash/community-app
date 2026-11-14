@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -70,6 +71,7 @@ export default function CommunityView() {
   const [reportedIds, setReportedIds] = useState<number[]>([]);
   const [tab, setTab] = useState<"all" | "text" | "image" | "video">("all");
   const [activeVideoId, setActiveVideoId] = useState<number | null>(null);
+  const [blockedVideoId, setBlockedVideoId] = useState<number | null>(null);
   const videoFeedRef = useRef<HTMLUListElement | null>(null);
   const isVideoFeed = tab === "video";
 
@@ -150,7 +152,11 @@ export default function CommunityView() {
 
     feed.querySelectorAll<HTMLVideoElement>("video").forEach((video) => {
       if (isVideoFeed && Number(video.dataset.videoPostId) === activeVideoId) {
-        video.play().catch(() => {});
+        video.muted = false;
+        video.play().then(
+          () => setBlockedVideoId(null),
+          () => setBlockedVideoId(Number(video.dataset.videoPostId))
+        );
       } else {
         video.pause();
       }
@@ -301,13 +307,29 @@ export default function CommunityView() {
   const visiblePosts = posts.filter((p) => tab === "all" || p.type === tab);
   const videoPosts = visiblePosts.filter((post) => post.type === "video" && post.video_path);
 
+  const startVideoFeedWithSound = () => {
+    flushSync(() => setTab("video"));
+    const firstVideo = videoFeedRef.current?.querySelector<HTMLVideoElement>("video");
+    if (!firstVideo) return;
+
+    const postId = Number(firstVideo.dataset.videoPostId);
+    firstVideo.muted = false;
+    const playPromise = firstVideo.play();
+    if (Number.isFinite(postId)) setActiveVideoId(postId);
+    playPromise.then(
+      () => setBlockedVideoId(null),
+      () => setBlockedVideoId(Number.isFinite(postId) ? postId : null)
+    );
+  };
+
   const advanceToNextVideo = (postId: number) => {
     if (videoPosts.length === 0) return;
     if (videoPosts.length === 1) {
       const onlyVideo = videoFeedRef.current?.querySelector<HTMLVideoElement>("video");
       if (onlyVideo) {
         onlyVideo.currentTime = 0;
-        onlyVideo.play().catch(() => {});
+        onlyVideo.muted = false;
+        onlyVideo.play().catch(() => setBlockedVideoId(postId));
       }
       return;
     }
@@ -336,12 +358,30 @@ export default function CommunityView() {
           controls
           controlsList="nofullscreen"
           autoPlay={activeVideoId === post.id}
-          muted
+          muted={false}
           playsInline
           preload={activeVideoId === post.id ? "auto" : "metadata"}
           onEnded={() => advanceToNextVideo(post.id)}
           className="absolute inset-0 h-full w-full bg-black object-contain"
         />
+      )}
+      {immersive && blockedVideoId === post.id && (
+        <button
+          className="absolute inset-x-8 top-1/2 z-30 mx-auto -translate-y-1/2 rounded-full bg-black/80 px-5 py-3 text-sm"
+          onClick={() => {
+            const video = videoFeedRef.current?.querySelector<HTMLVideoElement>(
+              `video[data-video-post-id="${post.id}"]`
+            );
+            if (!video) return;
+            video.muted = false;
+            video.play().then(
+              () => setBlockedVideoId(null),
+              () => setBlockedVideoId(post.id)
+            );
+          }}
+        >
+          ▶ 音を出して再生
+        </button>
       )}
       <div
         className={
@@ -551,7 +591,7 @@ export default function CommunityView() {
         className={`rounded border px-3 py-1 ${
           tab === value ? "bg-white text-black" : ""
         }`}
-        onClick={() => setTab(value)}
+        onClick={() => (value === "video" ? startVideoFeedWithSound() : setTab(value))}
         >
           {label}
         </button>
