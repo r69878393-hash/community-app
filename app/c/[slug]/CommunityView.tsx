@@ -27,7 +27,7 @@ type Post = {
 };
 
 const MAX_IMAGE_MB = 5;
-const MAX_VIDEO_MB = 20;
+const MAX_VIDEO_MB = 70;
 const MAX_VIDEO_SECONDS = 60;
 const VIDEO_TYPES = ["video/mp4", "video/webm"];
 
