@@ -16,6 +16,14 @@ type Community = {
 
 type Profile = { username: string };
 
+type Reply = {
+  id: number;
+  content: string;
+  created_at: string;
+  user_id: string | null;
+  profiles: Profile[] | Profile | null;
+};
+
 type Post = {
   id: number;
   content: string;
@@ -70,6 +78,12 @@ export default function CommunityView() {
   const [reportingId, setReportingId] = useState<number | null>(null);
   const [reportedIds, setReportedIds] = useState<number[]>([]);
   const [tab, setTab] = useState<"all" | "text" | "image" | "video">("all");
+  const [openRepliesPostId, setOpenRepliesPostId] = useState<number | null>(null);
+  const [replies, setReplies] = useState<Reply[]>([]);
+  const [replyText, setReplyText] = useState("");
+  const [repliesLoading, setRepliesLoading] = useState(false);
+  const [replyPosting, setReplyPosting] = useState(false);
+  const [replyError, setReplyError] = useState("");
   const [activeVideoId, setActiveVideoId] = useState<number | null>(null);
   const [blockedVideoId, setBlockedVideoId] = useState<number | null>(null);
   const videoFeedRef = useRef<HTMLUListElement | null>(null);
@@ -272,6 +286,54 @@ export default function CommunityView() {
     }
     loadPosts(community.id);
   };
+
+  const loadReplies = async (postId: number) => {
+    setRepliesLoading(true);
+    setReplyError("");
+    const { data, error } = await supabase
+      .from("replies")
+      .select("id, content, created_at, user_id, profiles(username)")
+      .eq("post_id", postId)
+      .order("created_at", { ascending: true });
+    if (error) {
+      console.error(error);
+      setReplyError("Couldn't load replies. Please check the Supabase setup.");
+      setReplies([]);
+    } else {
+      setReplies((data ?? []) as Reply[]);
+    }
+    setRepliesLoading(false);
+  };
+
+  const toggleReplies = (postId: number) => {
+    if (openRepliesPostId === postId) {
+      setOpenRepliesPostId(null);
+      setReplies([]);
+      setReplyText("");
+      setReplyError("");
+      return;
+    }
+    setOpenRepliesPostId(postId);
+    setReplyText("");
+    loadReplies(postId);
+  };
+
+  const handleReply = async (postId: number) => {
+    const content = replyText.trim();
+    if (!content || !userId || replyPosting) return;
+    setReplyPosting(true);
+    setReplyError("");
+    const { error } = await supabase.from("replies").insert({ post_id: postId, content });
+    if (error) {
+      console.error(error);
+      setReplyError("Couldn't send the reply. Please try again.");
+    } else {
+      setReplyText("");
+      await loadReplies(postId);
+    }
+    setReplyPosting(false);
+  };
+
   const handleReport = async (postId: number, reason: string) => {
     const { error } = await supabase
       .from("reports")
@@ -393,15 +455,73 @@ export default function CommunityView() {
         {getUsername(post)} ・ {new Date(post.created_at).toLocaleString(t.locale)}
       </div>
       {post.content && (
-        <div
+        <button
           className={
             immersive
-              ? "absolute bottom-24 left-4 right-20 z-10 whitespace-pre-wrap rounded bg-black/40 p-2"
-              : "whitespace-pre-wrap"
+              ? "absolute bottom-24 left-4 right-20 z-10 rounded bg-black/40 p-2 text-left whitespace-pre-wrap"
+              : "whitespace-pre-wrap text-left"
           }
+          onClick={() => toggleReplies(post.id)}
+          aria-label="Open replies for this post"
         >
           {post.content}
-        </div>
+        </button>
+      )}
+      <button
+        className={immersive
+          ? "absolute bottom-16 left-4 z-10 rounded bg-black/60 px-3 py-2 text-sm"
+          : "mt-2 self-start text-sm underline opacity-70"}
+        onClick={() => toggleReplies(post.id)}
+        aria-expanded={openRepliesPostId === post.id}
+      >
+        {openRepliesPostId === post.id ? "Hide replies" : "View replies / Reply"}
+      </button>
+      {openRepliesPostId === post.id && (
+        <section className={immersive
+          ? "absolute inset-x-4 bottom-28 z-20 max-h-[45dvh] overflow-y-auto rounded border border-white/30 bg-black/90 p-3"
+          : "mt-3 rounded border p-3"} aria-label="Replies">
+          <h2 className="mb-2 text-sm font-semibold">Replies</h2>
+          {repliesLoading ? (
+            <p className="text-sm opacity-70">Loading replies...</p>
+          ) : replies.length === 0 ? (
+            <p className="text-sm opacity-70">No replies yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {replies.map((reply) => {
+                const profile = Array.isArray(reply.profiles) ? reply.profiles[0] : reply.profiles;
+                return (
+                  <li key={reply.id} className="border-t border-white/20 pt-2 text-sm">
+                    <p className="mb-1 opacity-70">
+                      {profile?.username ?? t.legacyPost} · {new Date(reply.created_at).toLocaleString(t.locale)}
+                    </p>
+                    <p className="whitespace-pre-wrap">{reply.content}</p>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {userId ? (
+            <div className="mt-3">
+              <textarea
+                className="w-full rounded border bg-black p-2 text-white"
+                rows={2}
+                placeholder="Write a reply..."
+                value={replyText}
+                onChange={(event) => setReplyText(event.target.value)}
+              />
+              <button
+                className="mt-2 rounded bg-white px-3 py-1 text-sm text-black disabled:opacity-50"
+                onClick={() => handleReply(post.id)}
+                disabled={replyPosting || !replyText.trim()}
+              >
+                {replyPosting ? "Sending..." : "Reply"}
+              </button>
+              {replyError && <p className="mt-2 text-sm text-red-400">{replyError}</p>}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm"><Link href="/login" className="underline">Log in</Link> to reply.</p>
+          )}
+        </section>
       )}
       {!immersive && post.image_path && (
         // eslint-disable-next-line @next/next/no-img-element
